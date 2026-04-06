@@ -1,55 +1,51 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
 import os
-import datetime
-import time
 
-def limpar():
-    os.system('cls' if os.name == 'nt' else 'clear')
+# Configuração da Página
+st.set_page_config(page_title="InjexFlow 4.0 - Dashboard", layout="wide")
 
-def obter_turno():
-    hora = datetime.datetime.now().hour
-    if 6 <= hora < 14: return "Turno_1"
-    elif 14 <= hora < 22: return "Turno_2"
-    else: return "Turno_3"
+st.title("🏭 InjexFlow 4.0 | Monitoramento em Tempo Real")
+st.markdown("---")
 
-def registrar():
-    limpar()
-    print("--- 🏭 REGISTRO INJEXFLOW ---")
-    maquina = input("Nº da Injetora: ")
-    q = input("Quantidade BOAS: ")
-    r = input("Quantidade REFUGO: ")
+# Verificar se o arquivo existe
+if os.path.exists("producao.csv"):
+    # Carregar Dados
+    df = pd.read_csv("producao.csv", names=['Data', 'Injetora', 'Boas', 'Refugo', 'Defeito', 'Selo'])
     
-    if q.isdigit() and r.isdigit():
-        q, r = int(q), int(r)
-        turno = obter_turno()
-        agora = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-        
-        # Salva no CSV
-        with open("producao.csv", "a") as f:
-            f.write(f"{agora},{turno},{maquina},{q},{r}\n")
-        
-        # Alerta de Qualidade
-        if q > 0 and (r / (q + r)) > 0.10:
-            print("\n⚠️  ALERTA: REFUGO ACIMA DE 10%!")
-            time.sleep(2)
-        print("\n✅ SALVO!")
-    else:
-        print("\n❌ Erro: Use apenas números.")
-    time.sleep(1)
+    # Métricas de Topo
+    total_boas = df['Boas'].sum()
+    total_refugo = df['Refugo'].sum()
+    eficiencia = (total_boas / (total_boas + total_refugo) * 100) if (total_boas + total_refugo) > 0 else 0
 
-while True:
-    limpar()
-    print("      INJEXFLOW 2.0 🏭")
-    print("="*25)
-    print("1 - Registrar Produção")
-    print("2 - Ver Resumo")
-    print("3 - Sair")
-    op = input("\nEscolha: ")
-    if op == "1": registrar()
-    elif op == "2":
-        limpar()
-        print("--- 📊 DADOS GRAVADOS ---")
-        try:
-            with open("producao.csv", "r") as f: print(f.read())
-        except: print("Sem dados.")
-        input("\n[ENTER para voltar]")
-    elif op == "3": break
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Peças Boas", f"{int(total_boas)} un")
+    col2.metric("Refugo Total", f"{int(total_refugo)} un", delta=f"{int(total_refugo)}", delta_color="inverse")
+    col3.metric("Eficiência OEE", f"{eficiencia:.1f}%")
+
+    st.markdown("---")
+
+    # Gráficos Interativos
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.subheader("📊 Produção por Entrada")
+        fig_prod = px.bar(df, x=df.index, y=['Boas', 'Refugo'], 
+                          title="Evolução da Produção",
+                          color_discrete_map={'Boas': '#2ecc71', 'Refugo': '#e74c3c'})
+        st.plotly_chart(fig_prod, use_container_width=True)
+
+    with c2:
+        st.subheader("🔍 Motivos de Refugo")
+        fig_pizza = px.pie(df[df['Refugo'] > 0], names='Defeito', values='Refugo', 
+                           title="Distribuição de Defeitos",
+                           color_discrete_sequence=px.colors.sequential.RdBu)
+        st.plotly_chart(fig_pizza, use_container_width=True)
+
+    # Tabela de Auditoria (ISO 9001)
+    st.subheader("📋 Registro de Auditoria (Imutável)")
+    st.dataframe(df, use_container_width=True)
+
+else:
+    st.warning("⚠️ Arquivo 'producao.csv' não encontrado. Registre algo no terminal primeiro!")
